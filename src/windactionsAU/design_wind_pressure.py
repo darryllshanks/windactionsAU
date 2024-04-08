@@ -244,7 +244,7 @@ def shielding_multiplier(height: float, h_s: float=3.0, b_s: float=3.0, n_s: flo
             to not divide by zero.
     
     Returns:
-        Shielding Multiplier, M_s
+        Shielding Multiplier, M_s.
     """
     try:
         l_s = height * (10 / n_s + 5)
@@ -255,21 +255,59 @@ def shielding_multiplier(height: float, h_s: float=3.0, b_s: float=3.0, n_s: flo
     if s >= 12.0 or height > 25:
         M_s = 1.0
     elif s <= 1.5:
-        M_s = 0.7,
+        M_s = 0.7
     else:
-        x = [1.5, 3.0, 6.0, 12.0]
-        y = [0.7, 0.8, 0.9, 1.0]
-        M_s = np.interp(s, x, y)
+        s_data = [[1.5, 3.0, 6.0, 12.0], [0.7, 0.8, 0.9, 1.0]]
+        M_s = np.interp(s, s_data[0], s_data[1])
 
     return M_s
 
 
-def topographic_multiplier():
+def topographic_multiplier(wind_region: str, z: float, hill_height: float, L_u: float, x: float, escarpment: bool=False, site_elevation: float=0.0):
     """
+    Calculates the topographic multiplier per Clause 4.4 for wind in
+
+    Args:
+        wind_region: The wind region applicable to the site location as shown 
+            in Figure 3.1(A) and Figure 3.1(B). The input shall be either: 
+            'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'C', or 'D'.
+        z: reference height of the structures above average local ground
+            level (m).
+        hill_height: height of the hill, ridge or escarpment (m).
+        L_u: horizontal distance upwind from the crest of the hill, ridge or 
+            escarpment to a level half the height below the crest (m).
+        x: horizontal distance upwind or downwind of the structure to the crest
+            of the hill, ridge or escarpment (m).
+        escarpment: boolean identifier whether an escarpment is present (false)
+            or not (true); default is false
+        site_elevation: site elevation about mean sea level (m).
+
+    Returns:
     
     """
+    upwind_slope = hill_height / (2 * L_u)
+    L_1 = max(0.36 * L_u, 0.4 * hill_height)
+    if escarpment == False:
+        L_2 = 4 * L_1
+    else:
+        L_2 = 10 * L_1
 
+    # if abs(x)
+
+    if upwind_slope < 0.05:
+        M_h = 1.0
+    elif upwind_slope > 0.45 and x >=0 and x <= hill_height / 4:
+        M_h = 1 + 0.71 * (1 - abs(x) / L_2)
+    else:
+        M_h = 1 + (hill_height / (3.5 * (z + L_1))) * (1 - abs(x) / L_2)
 
     M_lee = 1.0  # Does not deal with sites in New Zealand
+
+    if wind_region == 'A0':
+        M_t = 0.5 + 0.5 * M_h
+    elif wind_region == 'A4' and site_elevation >= 500:
+        M_t = M_h * M_lee * (1 + 0.00015 * site_elevation)
+    else:
+        M_t = max (M_h, M_lee)
 
     return M_t
