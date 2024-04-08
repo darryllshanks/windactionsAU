@@ -1,4 +1,7 @@
+import numpy as np
 import pandas as pd
+
+from math import sqrt
 
 
 # @dataclass
@@ -106,17 +109,19 @@ def regional_wind_speed(wind_region: str, R: float) -> float:
     return round(wind_speed)
 
 
-def wind_direction_mult(wind_region: str, polygon_xsec: bool=False) -> pd.Series:
+def wind_direction_multiplier(wind_region: str, polygon_xsec: bool=False) -> pd.Series:
     """
     Calculates the wind direction multiplier (M_d) in each cardinal direction 
     for the site. Returns a Pandas series for wind on the primary structure 
-    and a serparate series for wind on the cladding.
+    and a separate series for wind on the cladding and immediate support
+    structure.
 
     Args:
         wind_region: The wind region applicable to the site location as shown 
             in Figure 3.1(A) and Figure 3.1(B). The input shall be either: 
             'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'C', or 'D'.
-        polygon_xsec: 
+        polygon_xsec: Defines whether the structure is a chimney, tank, or
+            pole with a circular or polygonal cross-section.
     
     Returns:
         Wind Direction Multiplier, M_d and M_d_cladding
@@ -156,7 +161,7 @@ def wind_direction_mult(wind_region: str, polygon_xsec: bool=False) -> pd.Series
     return df_Md, df_Md_cladding
 
 
-def climate_change_mult(wind_region: str) -> float:
+def climate_change_multiplier(wind_region: str) -> float:
     """
     Calculates the climate change multiplier.
 
@@ -175,7 +180,7 @@ def climate_change_mult(wind_region: str) -> float:
     return M_c
 
 
-def terrain_height_mult(
+def terrain_height_multiplier(
         terrain_category: str,
         wind_region: str,
         height: float,
@@ -193,31 +198,78 @@ def terrain_height_mult(
         height:
 
     Returns:
-
+        Returns a single value for the terrain height multiplier if the wind
+            speed does not vary with height, otherwise returns a series of the 
+            terrain height multipliers for various heights.
     """
     M_zcat_data = {
-        'Terrain Category': ['TC1', 'TC2', 'TC2.5', 'TC3', 'TC4'],
-        3: [0.97, 0.91, 0.87, 0.83, 0.75],
-        5: [1.01, 0.91, 0.87, 0.83, 0.75],
-        10: [1.08, 1.00, 0.92, 0.83, 0.75],
-        15: [1.12, 1.05, 0.97, 0.89, 0.75],
-        20: [1.14, 1.08, 1.01, 0.94, 0.75],
-        30: [1.18, 1.12, 1.06, 1.00, 0.80],
-        40: [1.21, 1.16, 1.10, 1.04, 0.85],
-        50: [1.23, 1.19, 1.13, 1.07, 0.90],
-        75: [1.27, 1.22, 1.17, 1.12, 0.98],
-        100: [1.31, 1.24, 1.20, 1.16, 1.03],
-        150: [1.36, 1.27, 1.24, 1.21, 1.11],
-        200: [1.39, 1.29, 1.27, 1.24, 1.16]
+        'Height': [3, 5, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200],
+        'TC1': [0.97, 1.01, 1.08, 1.12, 1.14, 1.18, 1.21, 1.23, 1.27, 1.31, 1.36, 1.39],
+        'TC2': [0.91, 0.91, 1.00, 1.05, 1.08, 1.12, 1.16, 1.19, 1.22, 1.24, 1.27, 1.29],
+        'TC2.5': [0.87, 0.87, 0.92, 0.97, 1.01, 1.06, 1.10, 1.13, 1.17, 1.20, 1.24, 1.27],
+        'TC3': [0.83, 0.83, 0.83, 0.89, 0.94, 1.00, 1.04, 1.07, 1.12, 1.16, 1.21, 1.24],
+        'TC4': [0.75, 0.75, 0.75, 0.75, 0.75, 0.80, 0.85, 0.90, 0.98, 1.03, 1.11, 1.16]
     }
-    df = pd.DataFrame(data = M_zcat_data).set_index('Terrain Category')
 
     if wind_region == 'A0':
-        df_M_zcat = pd.Series(
+        M_zcat_series = pd.Series(
             data=[0.91, 0.91, 1.00, 1.05, 1.08, 1.12, 1.16, 1.18, 1.22, 1.24, 1.24, 1.24],
-            index=[3, 5, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200]
+            index=M_zcat_data['Height']
         )
     else:
-        df_M_zcat = df.loc[terrain_category]
+        M_zcat_series = pd.Series(
+            data=M_zcat_data[terrain_category],
+            index=M_zcat_data['Height']
+        )
 
-    return df_M_zcat
+    if vary_wind_speed == False:
+        M_zcat = np.interp(height, list(M_zcat_series.index), list(M_zcat_series.values))
+        return M_zcat
+    else:
+        return M_zcat_series
+    
+
+def shielding_multiplier(height: float, h_s: float=3.0, b_s: float=3.0, n_s: float=0.001):
+    """
+    Calculates the shielding multiplier per Clause 4.3.
+
+    Args:
+        height: average roof height, above ground, of the structure being 
+            shielded (m).
+        h_s: average roof height of shielding buildings (m); default is 3m.
+        b_s: average breadth of shielding buildings, normal to the wind stream
+            (m); default is 3m.
+        n_s: number of upwind shielding buildings within a 45 degree sector of 
+            radius 20*h and with h_s >= h; default is 0, which is set at 0.001
+            to not divide by zero.
+    
+    Returns:
+        Shielding Multiplier, M_s
+    """
+    try:
+        l_s = height * (10 / n_s + 5)
+        s = l_s / sqrt(h_s * b_s)
+    except:
+        raise ZeroDivisionError(f"The parameters h_s, b_s, and n_s shall not be zero.")
+
+    if s >= 12.0 or height > 25:
+        M_s = 1.0
+    elif s <= 1.5:
+        M_s = 0.7,
+    else:
+        x = [1.5, 3.0, 6.0, 12.0]
+        y = [0.7, 0.8, 0.9, 1.0]
+        M_s = np.interp(s, x, y)
+
+    return M_s
+
+
+def topographic_multiplier():
+    """
+    
+    """
+
+
+    M_lee = 1.0  # Does not deal with sites in New Zealand
+
+    return M_t
