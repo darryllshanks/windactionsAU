@@ -21,3 +21,9 @@ from windactionsAU.wind_pressure import(
     basic_wind_pressure,
     design_wind_pressure,
 )
+
+from windactionsAU.aerodynamic_shape_factors import(
+    ext_pressure_coeff_windward_wall,
+    ext_pressure_coeff_leeward_wall,
+    ext_pressure_coeff_side_walls,
+)
