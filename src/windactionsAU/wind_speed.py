@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from math import sqrt
+from windactionsAU.utils import str_to_int
 
 
 # @dataclass
@@ -36,12 +37,13 @@ def average_recurrence_interval(
 
     Args:
         design_life: The design working life of a structure (in years). The 
-            input shall be either: 'Construction Equipment', '5 Years', 
-            '25 Years', '50 Years', or '100 Years'; default = '50 Years'.
+            input shall be a string of either: 'Construction Equipment', 
+            '5 Years', '25 Years', '50 Years', or '100 Years'; 
+            default = '50 Years'.
         importance_level: The importance level of a structure as determined 
             by the National Construction Code of Australia or AS/NZS 
-            1170.0:2002 Table F1. The input shall be either 1, 2, 3, or 4.
-            Default is 2.
+            1170.0:2002 Table F1. The input shall be either 1, 2, 3, or 4;
+            default is 2.
         cyclonic: Specifies whether the structure is in a cyclonic or
             non-cyclonic area; default is False (aka. non-cyclonic).
     Returns:
@@ -55,10 +57,12 @@ def average_recurrence_interval(
     ari_dict = {
         'Construction Equipment': 100,
         '5 Years': {1: 25, 2: 50, 3: 100, 4: 'NA'},
-        '25 Years': {1: 100, 2: 500, 3: 500, 4: 1000},
+        '25 Years': {1: 100, 2: 200, 3: 500, 4: 1000},
         '50 Years': {1: ari_wind, 2: 500, 3: 1000, 4: 2500},
         '100 Years': {1: 500, 2: 1000, 3: 2500, 4: 'Risk Analysis'}
     }
+    importance_level = str_to_int(importance_level)
+
     try:
         if design_life == 'Construction Equipment':
             ari = ari_dict[design_life]
@@ -88,7 +92,7 @@ def regional_wind_speed(wind_region: str, R: float) -> float:
         R: The Average Recurrence Interval (years).
 
     Returns:
-        Regional Wind Speed (m/s).
+        Regional wind speed (m/s).
     """
     if wind_region.startswith('A') == True:
         wind_speed = 67 - 41 * R ** (-0.1)
@@ -109,7 +113,99 @@ def regional_wind_speed(wind_region: str, R: float) -> float:
     return round(wind_speed)
 
 
-def wind_direction_multiplier(wind_region: str, polygon_xsec: bool=False) -> pd.Series:
+def site_wind_speed(V_R, M_c, M_d, M_zcat, M_s, M_t):
+    """
+    Calculates the site wind speed defined for the 8 cardinal directions for
+    the specified reference height above ground.
+
+    Args:
+        V_R: regional wind speed (m/s).
+        M_c: climate change multiplier.
+        M_d: Pandas series containing wind direction multipliers for the 8 
+            cardinal directions.
+        M_zcat: terrain/height multiplier.
+        M_s: shielding multiplier.
+        M_t: topgraphic multiplier.
+
+    Returns:
+        Site wind speed (m/s).
+    """
+    acc = []
+    for beta in M_d:
+        # V_R * M_c * beta * (M_zcat * M_s * M_t)
+        acc.append(V_R * M_c * beta * (M_zcat * M_s * M_t))
+
+    V_sit_beta = pd.Series(
+        data=acc,
+        index=['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+    )
+    return V_sit_beta
+
+
+def design_wind_speed(orientation_angle: float, V_sit_beta: pd.Series) -> dict:
+    """
+    Calculates the building / structure orthogonal design wind speeds.
+
+    Args:
+        orientation_angle: The orientation of the building/structure primary 
+            orthogonal angle of 0 Degrees relative to the site true North. This 
+            shall be selected from between 0 and 90 degrees, rounded to the
+            nearest 5 degrees. Refer to AS/NZS 1170.2:2021 Figure 2.2.
+        V_sit_beta: A Pandas series containing the site wind speeds in the 8
+            cardinal directions (m/s).
+    
+    Returns:
+        Dictionary containing the design wind speeds (m/s) for building / 
+        structure in the 4 orthogonal directions.
+    """
+    # Generates a Pandas DataFrame for Wind Direction multipliers in 5 degree increments
+    acc = []
+    angles = np.arange(-45, 360, 5).tolist()
+    for i in angles:
+        if i < 0:
+            M_d_interp = np.interp(i, [-45, 0], [V_sit_beta.iloc[7], V_sit_beta.iloc[0]])
+        elif i >= 0 and i < 45:
+            M_d_interp = np.interp(i, [0, 45], [V_sit_beta.iloc[0], V_sit_beta.iloc[1]])
+        elif i >= 45 and i < 90:
+            M_d_interp = np.interp(i, [45, 90], [V_sit_beta.iloc[1], V_sit_beta.iloc[2]])
+        elif i >= 90 and i < 135:
+            M_d_interp = np.interp(i, [90, 135], [V_sit_beta.iloc[2], V_sit_beta.iloc[3]])
+        elif i >= 135 and i < 180:
+            M_d_interp = np.interp(i, [135, 180], [V_sit_beta.iloc[3], V_sit_beta.iloc[4]])
+        elif i >= 180 and i < 225:
+            M_d_interp = np.interp(i, [180, 225], [V_sit_beta.iloc[4], V_sit_beta.iloc[5]])
+        elif i >= 225 and i < 270:
+            M_d_interp = np.interp(i, [225, 270], [V_sit_beta.iloc[5], V_sit_beta.iloc[6]])
+        elif i >= 270 and i < 315:
+            M_d_interp = np.interp(i, [270, 315], [V_sit_beta.iloc[6], V_sit_beta.iloc[7]])
+        elif i >= 315 and i < 360:
+            M_d_interp = np.interp(i, [315, 360], [V_sit_beta.iloc[7], V_sit_beta.iloc[0]])
+        acc.append([i, M_d_interp])
+
+    M_d_df = pd.DataFrame(
+        data=acc,
+        columns=["Angles", "V_sit_beta"]
+    )
+
+    V_des_theta = {}
+    if orientation_angle >=0 and orientation_angle <=90:
+        ortho_directions = [0, 90, 180, 270]
+        for ortho_direction in ortho_directions:
+            angle = orientation_angle + ortho_direction
+            angle_lower = angle - 45
+            angle_upper = angle + 45
+
+            mask_1 = M_d_df['Angles'] >= angle_lower
+            mask_2 = M_d_df['Angles'] <= angle_upper
+            masked_df = M_d_df.loc[mask_1 & mask_2, ["V_sit_beta"]].values.tolist()
+            V_sit_beta_max = max(max(masked_df)[0], 30)
+            V_des_theta.update({str(ortho_direction) + " Deg": V_sit_beta_max})
+    else:
+        raise ValueError(f"The building orientation angle shall be between 0 and 90 degrees, not '{orientation_angle}' degrees.")
+    return V_des_theta
+
+
+def wind_direction_multiplier(wind_region: str, modifier: bool=False) -> pd.Series:
     """
     Calculates the wind direction multiplier (M_d) in each cardinal direction 
     for the site. Returns a Pandas series for wind on the primary structure 
@@ -120,11 +216,11 @@ def wind_direction_multiplier(wind_region: str, polygon_xsec: bool=False) -> pd.
         wind_region: The wind region applicable to the site location as shown 
             in Figure 3.1(A) and Figure 3.1(B). The input shall be either: 
             'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'C', or 'D'.
-        polygon_xsec: Defines whether the structure is a chimney, tank, or
-            pole with a circular or polygonal cross-section.
+        modifier: A bool defining whether the structure is a chimney, tank, or
+            pole with a circular or polygonal cross-section; default = False.
     
     Returns:
-        Wind Direction Multiplier, M_d and M_d_cladding
+        Wind Direction Multiplier, M_d and M_d_cladding.
     """
     wind_dir_data = {
         'Region': ['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'C', 'D'],
@@ -140,7 +236,7 @@ def wind_direction_multiplier(wind_region: str, polygon_xsec: bool=False) -> pd.
     df = pd.DataFrame(data = wind_dir_data).set_index('Region')
 
     try:
-        if polygon_xsec == False:
+        if modifier == False:
             df_Md = df.loc[wind_region]
         else:
             df_Md = pd.Series(
@@ -171,7 +267,7 @@ def climate_change_multiplier(wind_region: str) -> float:
             'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'C', or 'D'.
 
     Returns:
-        Climate Change Multiplier, M_c
+        Climate Change Multiplier, M_c.
     """
     if wind_region == 'B2' or wind_region == 'C' or wind_region == 'D':
         M_c = 1.05
@@ -184,7 +280,6 @@ def terrain_height_multiplier(
         terrain_category: str,
         wind_region: str,
         height: float,
-        vary_wind_speed: bool=False
 ) -> float:
     """
     Calculates the terrain/height multiplier per Clause 4.2.2.
@@ -195,7 +290,7 @@ def terrain_height_multiplier(
         wind_region: The wind region applicable to the site location as shown 
             in Figure 3.1(A) and Figure 3.1(B). The input shall be either: 
             'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'C', or 'D'.
-        height:
+        height: Average roof height in metres.
 
     Returns:
         Returns a single value for the terrain height multiplier if the wind
@@ -222,11 +317,11 @@ def terrain_height_multiplier(
             index=M_zcat_data['Height']
         )
 
-    if vary_wind_speed == False:
-        M_zcat = np.interp(height, list(M_zcat_series.index), list(M_zcat_series.values))
-        return M_zcat
-    else:
-        return M_zcat_series
+    # if vary_wind_speed == False:
+    M_zcat = np.interp(height, list(M_zcat_series.index), list(M_zcat_series.values))
+    return M_zcat
+    # else:
+    #     return M_zcat_series
     
 
 def shielding_multiplier(height: float, h_s: float=3.0, b_s: float=3.0, n_s: float=0.001):
