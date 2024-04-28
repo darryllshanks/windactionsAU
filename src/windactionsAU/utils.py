@@ -28,29 +28,34 @@ def str_to_float(s: str):
         return s
     
 
-def read_csv_file(filename: str) -> list[list[str]]:
-    """
-    Returns data contained in the file, 'filename' as a list of lists
-    of strings. It is assumed the data is in a csv style format.
-    e.g., separated by commas.
-    """
-    with open(filename, 'r') as csv_file:
-        csv_reader = csv.reader(csv_file)
-        csv_data = list(csv_reader)
-    return csv_data
+# def read_csv_file(filename: str) -> list[list[str]]:
+#     """
+#     Returns data contained in the file, 'filename' as a list of lists
+#     of strings. It is assumed the data is in a csv style format.
+#     e.g., separated by commas.
+#     """
+#     with open(filename, 'r') as csv_file:
+#         csv_reader = csv.reader(csv_file)
+#         csv_data = list(csv_reader)
+#     return csv_data
 
 
 def round_down(n, decimals=0) -> float:
     """
     Returns a number rounded down to the specified number of decimal places.
     """
-    multiplier = 10 ** decimals
-    return math.floor(n * multiplier) / multiplier
-
+    try:
+        multiplier = 10 ** decimals
+        return math.floor(n * multiplier) / multiplier
+    except ValueError:
+        return n
 
 def round_up(n, decimals=0) -> float:
     """
     Returns a number rounded up to the specified number of decimal places.
     """
-    multiplier = 10 ** decimals 
-    return math.ceil(n * multiplier) / multiplier
+    try:
+        multiplier = 10 ** decimals 
+        return math.ceil(n * multiplier) / multiplier
+    except ValueError:
+        return n

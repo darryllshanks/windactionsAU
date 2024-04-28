@@ -26,4 +26,8 @@ from windactionsAU.aerodynamic_shape_factors import(
     ext_pressure_coeff_windward_wall,
     ext_pressure_coeff_leeward_wall,
     ext_pressure_coeff_side_walls,
+    ext_pressure_coeff_roof_shallow,
+    ext_pressure_coeff_roof_steep,
+    area_reduction_factor,
+    tributary_area
 )
