@@ -327,3 +327,37 @@ def action_combination_factor(C_pi: float, framing_type: str="Case z") -> float:
     K_ce = action_combination_factors[design_case]["External"]
     K_ci = action_combination_factors[design_case]["Internal"]
     return K_ce, K_ci
+
+
+def local_pressure_factor_walls(h: float, d: float, b: float):
+    """
+    
+    Args:
+        h: average roof height (m).
+        d: building depth, parallel with the wind direction (m).
+        b: building width, perpendicular to the wind direction (m).
+
+    Returns:
+
+    """
+    a = min(0.2 * b, 0.2 * d, h)
+    area = 0.25 * a **2
+    
+
+
+
+def local_pressure_factor_roof(h: float, d: float, b: float):
+    """
+    
+    Args:
+        h: average roof height (m).
+        d: building depth, parallel with the wind direction (m).
+        b: building width, perpendicular to the wind direction (m).
+
+    Returns:
+
+    """
+    if h / d >= 0.2 or h / b >= 0.2:
+        a = min(0.2 * b, 0.2 * d)
+    else:
+        a = 2 * h
