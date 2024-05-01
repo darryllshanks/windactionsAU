@@ -265,19 +265,31 @@ def area_reduction_factor(trib_area: float, surface_parameter: str) -> float:
     return K_a
 
 
-def action_combination_factor(design_case: str, C_pi: float) -> float:
+def action_combination_factor(C_pi: float, framing_type: str="Case z") -> float:
     """
     Calculates the action combination factor for walls and roofs of enclosed
     buildings per AS/NZS 1170.2:2021 Clause 5.4.3.
 
     Args:
-        design_case: The input shall be either 'Case a', 'Case b', 'Case c', 
-            'Case d', 'Case e', 'Case f', 'Case g', or 'Case h' as described 
-            in AS/NZS 1170.2:2021 Table 5.5
         C_pi: the internal pressure coefficient.
+        framing_type: The input shall be one of the following framing
+            arrangement types (refer to AS/NZS 1170.2:2021 Table 5.5):
+            {
+                "Type 1": Portal frame with combination of wind pressures on 
+                    the windward walls, leeward walls, and the roof.
+                "Type 2": Portal frame with combination of wind pressures on
+                    the side walls and the roof.
+                "Type 3": Roof structure pinned at columns with roof wind
+                    pressure.
+                "Type 4": Lateral wind pressure on windward and leeward walls 
+                    of braced structures.
+                "Type 5": Lateral pressure on wall elements only.
+            }
+            If no framing_type is provided, the default value of 1.0  is 
+            returned for the external and internal combination factors.
 
     Returns:
-        Area Reduction Factor, Ka   
+        Action Combination Factors, Kc   
     """
     action_combination_factors = {
         "Case a": {"External": 0.8, "Internal": 1.0},
@@ -288,7 +300,30 @@ def action_combination_factor(design_case: str, C_pi: float) -> float:
         "Case f": {"External": 0.9, "Internal": 0.9},
         "Case g": {"External": 0.9, "Internal": 1.0},
         "Case h": {"External": 0.9, "Internal": 0.9},
+        "Case z": {"External": 1.0, "Internal": 1.0},
     }
+
+    if framing_type == "Type 1" and abs(C_pi) < 0.4:
+        design_case = "Case a"
+    elif design_case == "Type 1" and abs(C_pi) >= 0.4:
+        design_case = "Case b"
+    elif framing_type == "Type 2" and abs(C_pi) < 0.4:
+        design_case = "Case c"
+    elif design_case == "Type 2" and abs(C_pi) >= 0.4:
+        design_case = "Case d"
+    elif framing_type == "Type 3" and abs(C_pi) < 0.4:
+        design_case = "Case e"
+    elif design_case == "Type 3" and abs(C_pi) >= 0.4:
+        design_case = "Case f"
+    elif framing_type == "Type 4" and abs(C_pi) < 0.4:
+        design_case = "Case g"
+    elif framing_type == "Type 4" and abs(C_pi) >= 0.4:
+        design_case = "Case h"
+    elif design_case == "Type 5" and abs(C_pi) < 0.4:
+        design_case = "Case h"
+    elif design_case == "Type 5" and abs(C_pi) >= 0.4:
+        design_case = "Case z"
+
     K_ce = action_combination_factors[design_case]["External"]
     K_ci = action_combination_factors[design_case]["Internal"]
     return K_ce, K_ci
