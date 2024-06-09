@@ -113,6 +113,23 @@ def regional_wind_speed(wind_region: str, R: float) -> float:
     return round(wind_speed)
 
 
+def regional_wind_speed_SLS(wind_region: str) -> float:
+    """
+    Calculates the serviceability limit state regional wind speed.
+
+    Args:
+        wind_region: The wind region applicable to the site location as shown 
+            in Figure 3.1(A) and Figure 3.1(B). The input shall be either: 
+            'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'C', or 'D'.
+        R: The Average Recurrence Interval (years).
+
+    Returns:
+        Regional wind speed (m/s).
+    """
+    wind_speed = regional_wind_speed(wind_region, 25)
+    return round(wind_speed)
+
+
 def site_wind_speed(V_R, M_c, M_d, M_zcat, M_s, M_t):
     """
     Calculates the site wind speed defined for the 8 cardinal directions for
@@ -180,7 +197,7 @@ def design_wind_speed(orientation_angle: float, V_sit_beta: pd.Series) -> dict:
             M_d_interp = np.interp(i, [270, 315], [V_sit_beta.iloc[6], V_sit_beta.iloc[7]])
         elif i >= 315 and i < 360:
             M_d_interp = np.interp(i, [315, 360], [V_sit_beta.iloc[7], V_sit_beta.iloc[0]])
-        acc.append([i, M_d_interp])
+        acc.append([i, round(M_d_interp, 2)])
 
     M_d_df = pd.DataFrame(
         data=acc,
@@ -342,6 +359,8 @@ def shielding_multiplier(height: float, h_s: float=3.0, b_s: float=3.0, n_s: flo
         Shielding Multiplier, M_s.
     """
     try:
+        if h_s < height:
+            raise ValueError(f"The average roof height of shielding buildings shall be greater than the height of the building being shielded.")
         l_s = height * (10 / n_s + 5)
         s = l_s / sqrt(h_s * b_s)
     except:
@@ -358,15 +377,15 @@ def shielding_multiplier(height: float, h_s: float=3.0, b_s: float=3.0, n_s: flo
     return M_s
 
 
-def topographic_multiplier(wind_region: str, z: float, hill_height: float, L_u: float, x: float, escarpment: bool=False, site_elevation: float=0.0):
+def topographic_multiplier(wind_region: str, z: float, hill_height: float, L_u: float, x: float, escarpment: bool=False, E: float=0.0):
     """
-    Calculates the topographic multiplier per Clause 4.4 for wind in
+    Calculates the topographic multiplier per Clause 4.4.
 
     Args:
         wind_region: The wind region applicable to the site location as shown 
             in Figure 3.1(A) and Figure 3.1(B). The input shall be either: 
             'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'C', or 'D'.
-        z: reference height of the structures above average local ground
+        z: reference height of the structure above average local ground
             level (m).
         hill_height: height of the hill, ridge or escarpment (m).
         L_u: horizontal distance upwind from the crest of the hill, ridge or 
@@ -375,10 +394,10 @@ def topographic_multiplier(wind_region: str, z: float, hill_height: float, L_u: 
             of the hill, ridge or escarpment (m).
         escarpment: boolean identifier whether an escarpment is present (false)
             or not (true); default is false
-        site_elevation: site elevation about mean sea level (m).
+        E: site elevation about mean sea level (m).
 
     Returns:
-    
+        Topographic Multiplier, M_t.
     """
     upwind_slope = hill_height / (2 * L_u)
     L_1 = max(0.36 * L_u, 0.4 * hill_height)
@@ -400,8 +419,8 @@ def topographic_multiplier(wind_region: str, z: float, hill_height: float, L_u: 
 
     if wind_region == 'A0':
         M_t = 0.5 + 0.5 * M_h
-    elif wind_region == 'A4' and site_elevation >= 500:
-        M_t = M_h * M_lee * (1 + 0.00015 * site_elevation)
+    elif wind_region == 'A4' and E >= 500:
+        M_t = M_h * M_lee * (1 + 0.00015 * E)
     else:
         M_t = max (M_h, M_lee)
 

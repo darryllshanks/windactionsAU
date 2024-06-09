@@ -143,7 +143,7 @@ def ext_pressure_coeff_roof_steep(h: float, d: float, b: float, alpha: float):
         alpha: roof pitch (degrees).
 
     Returns:
-        Roof external pressure coefficients, C_pe
+        Roof external pressure coefficients, C_pe in the format of an 
     """
     height_depth_ratio = str_to_float(h) / str_to_float(d)
     width_depth_ratio = str_to_float(b) / str_to_float(d)
@@ -199,26 +199,29 @@ def ext_pressure_coeff_roof_steep(h: float, d: float, b: float, alpha: float):
             val_1 = -0.9
 
         # Cpe values for h/d <= 0.25
-        C_pe_R1 = np.interp(
+        C_pe_D1 = np.interp(
             alpha,
             [10, 15, 20, 25, 60],
             [-0.3, -0.5, -0.6, val_1, val_1]
         )
         # Cpe values for h/d == 0.5
-        C_pe_R2 = np.interp(
+        C_pe_D2 = np.interp(
             alpha,
             [10, 15, 20, 25, 60],
             [-0.5, -0.5, -0.6, val_1, val_1]
         )
         # Cpe values for h/d >= 1.0
-        C_pe_R3 = np.interp(
+        C_pe_D3 = np.interp(
             alpha,
             [10, 15, 20, 25, 60],
             [-0.7, -0.6, -0.6, val_1, val_1]
         )
-        C_pe_R = np.interp(height_depth_ratio, [0.25, 0.5, 1.0], [C_pe_R1, C_pe_R2, C_pe_R3])
+        C_pe_D = [
+            np.interp(height_depth_ratio, [0.25, 0.5, 1.0], [C_pe_D1, C_pe_D2, C_pe_D3]),
+            np.interp(height_depth_ratio, [0.25, 0.5, 1.0], [C_pe_D1, C_pe_D2, C_pe_D3])
+        ]
 
-        C_pe = [C_pe_U, C_pe_R]  
+        C_pe = [C_pe_U, C_pe_D]  
 
     else:
         raise ValueError(f"The roof pitch should be greater than 10 degrees, not '{alpha}' degrees.")
@@ -338,26 +341,76 @@ def local_pressure_factor_walls(h: float, d: float, b: float):
         b: building width, perpendicular to the wind direction (m).
 
     Returns:
-
+        Local Pressure Factor, Kl
     """
     a = min(0.2 * b, 0.2 * d, h)
-    area = 0.25 * a **2
-    
+
+    # Building aspect ratio
+    ratio = h / min(d, b)
+
+    # Generate dictionary
+    local_pressure_factors = {
+        "All": {"K_l": 1.0},
+        "WA1": {"K_l": 1.5, "Area": 0.25 * a ** 2, "Edge Proximity": "Anywhere"}
+    }
+    if ratio <= 1.0:
+        local_pressure_factors.update({"SA1": {"K_l": 1.5, "Area": a ** 2, "Edge Proximity": [0, a]}})
+        local_pressure_factors.update({"SA2": {"K_l": 2.0, "Area": 0.25 * a ** 2, "Edge Proximity": [0, 0.5 * a]}})
+    elif ratio > 1.0:
+        local_pressure_factors.update({"SA3": {"K_l": 1.5, "Area": 0.25 * a ** 2, "Edge Proximity": [a, d]}})
+        local_pressure_factors.update({"SA4": {"K_l": 2.0, "Area": a ** 2, "Edge Proximity": [0, a]}})
+        local_pressure_factors.update({"SA5": {"K_l": 3.0, "Area": 0.25 * a ** 2, "Edge Proximity": [0, 0.5 * a]}})
+    return local_pressure_factors
 
 
 
-def local_pressure_factor_roof(h: float, d: float, b: float):
+def local_pressure_factor_roof(h: float, d: float, b: float, alpha: float):
     """
-    
+    Calculates the local pressure factor (K_l) when determining the wind 
+    actions applied to cladding, their fixings, the members that directly 
+    support the cladding, and the immediate fixings of these members. 
+
     Args:
         h: average roof height (m).
         d: building depth, parallel with the wind direction (m).
         b: building width, perpendicular to the wind direction (m).
+        alpha: roof pitch (degrees).
 
     Returns:
-
+        Local Pressure Factor, Kl
     """
     if h / d >= 0.2 or h / b >= 0.2:
         a = min(0.2 * b, 0.2 * d)
     else:
         a = 2 * h
+
+    # Generate dictionary
+    local_pressure_factors = {
+        "All": {"K_l": 1.0},
+        "RA1": {"K_l": 1.5, "Area": a ** 2, "Edge Proximity": [0, a]},
+        "RA2": {"K_l": 2.0, "Area": 0.25 * a ** 2, "Edge Proximity": [0, 0.5 * a]}
+    }
+    if alpha < 10.0:
+        local_pressure_factors.update({"RC1": {"K_l": 3.0, "Area": 0.25 * a ** 2, "Edge Proximity": [0, a]}})
+    elif alpha >= 10:
+        local_pressure_factors.update({"RA3": {"K_l": 1.5, "Area": a ** 2, "Edge Proximity": [0, a]}})
+        local_pressure_factors.update({"RA4": {"K_l": 2.0, "Area": 0.25 * a ** 2, "Edge Proximity": [0, 0.5 * a]}})
+        local_pressure_factors.update({"RC2": {"K_l": 3.0, "Area": 0.25 * a ** 2, "Edge Proximity": [0, a]}}),
+    return local_pressure_factors
+
+
+def local_pressure_factor_negative_limit(K_l: float, C_pe: float) -> float:
+    """
+    Calculates the negative limit on the prodcuct of the Local Pressure Factor 
+    and the External Pressure Coefficient for rectangular buildings per 
+    AS/NZS 1170.2:2021 Clause 5.4.4.
+
+    Args:
+        K_l: the local pressure factor.
+        C_pe: the external pressure coefficient.
+
+    Returns:
+        Negative limit on the product of K_l * C_pe.
+    """
+    limit = max(K_l * C_pe, -3.0)
+    return limit
